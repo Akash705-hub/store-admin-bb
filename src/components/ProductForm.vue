@@ -366,7 +366,12 @@
           }
         } catch (error) {
           console.error(error);
-          alert(`Error occurred while saving product${error && error.message ? `: ${error.message}` : ''}`);
+          // Strip HTML error pages down to a readable one-liner.
+          const raw = error && error.message ? error.message : '';
+          const clean = raw.startsWith('<')
+            ? `Server returned an error (${raw.match(/<title>(.*?)<\/title>/i)?.[1] || 'status 500'}). Check the dev server console for details.`
+            : raw || 'Unknown error';
+          alert(`Error occurred while saving product: ${clean}`);
         }
       }
     }

@@ -41,7 +41,7 @@ export default {
     this.fetchOrders();
     this.polling = setInterval(() => {
       this.fetchOrders();
-    }, 2000);
+    }, 5000);
     document.title = "Best Buy: Admin Portal | Best Buy Canada";
   },
   beforeUnmount() {
