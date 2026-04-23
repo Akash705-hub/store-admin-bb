@@ -312,7 +312,7 @@
         };
 
         if (method === 'POST') {
-          delete payload.id;
+          payload.id = 0;  // product-service expects id:0 for new products
         }
 
         // UI-only timestamp should not be sent to the backend.
