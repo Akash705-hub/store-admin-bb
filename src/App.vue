@@ -3,12 +3,17 @@
   <router-view
     :orders="orders"
     :products="products"
+    :resolveImageUrl="resolveImageUrl" 
     @fetchOrders="fetchOrders"
     @completeOrder="completeOrder"
     @addProductsToList="addProductsToList"
     @updateProductInList="updateProductInList"
     @getProduct="getProduct"
     @getProducts="getProducts"
+    @cancelOrder="cancelOrder"
+    @shipOrder="shipOrder"
+    @updateOrder="updateOrder"
+    @deleteProduct="deleteProduct"
   ></router-view>
 </template>
 
@@ -18,6 +23,7 @@ import TopNav from './components/TopNav.vue';
 const productServiceUrl = "/products/";
 const singleProductServiceUrl = "/product/";
 const makelineServiceUrl = "/makeline/";
+const shippingServiceUrl = "/ship/";
 
 export default {
   name: 'App',
@@ -28,96 +34,195 @@ export default {
     return {
       orders: [],
       products: [],
-      product: {}
+      product: {},
+      polling: null
     }
   },
   mounted() {
     this.getProducts();
+    this.fetchOrders();
+    this.polling = setInterval(() => {
+      this.fetchOrders();
+    }, 2000);
+    document.title = "Best Buy: Admin Portal | Best Buy Canada";
+  },
+  beforeUnmount() {
+    clearInterval(this.polling);
   },
   methods: {
-    async addProductsToList(newProduct) {
-      this.products.push(newProduct);
+    // Constructs image URL with timestamp (for cache busting in future)
+    resolveImageUrl(product) {
+      if (!product || !product.id) return '/placeholder.png';
+      
+      const timestamp = product.lastImageUpdate || '';
+      return `${productServiceUrl}${product.id}/image?t=${timestamp}`;
     },
-    async updateProductInList(updatedProduct) {
-      const index = this.products.findIndex(product => product.id === updatedProduct.id);
-      this.products[index] = updatedProduct;
-    },
-    async getProduct(id) {
-      fetch(`${singleProductServiceUrl}${id}`)
-        .then(response => response.json())
-        .then(product => {
-          this.product.id = product.id
-          this.product.name = product.name
-          this.product.image = product.image
-          this.product.description = product.description
-          this.product.price = product.price
-        })
-        .catch(error => {
-          console.log(error)
-          alert('Error occurred while fetching product')
-        })
-    },
-    async getProducts() {
-      fetch(`${productServiceUrl}`)
-        .then(response => response.json())
-        .then(products => {
-          this.products = products
-        })
-        .catch(error => {
-          console.log(error)
-          alert('Error occurred while fetching products')
-        })
-    },
+    // Fetches orders from backend and updates local list
     async fetchOrders() {
       await fetch(`${makelineServiceUrl}order/fetch`)
-        .then(response => response.json())
-        .then(data => {
-          console.log(data)
-          if (data) {
-            this.orders = data;
+      .then(response => response.json())
+      .then(incomingOrders => {
+          if (incomingOrders) {
+              this.orders = incomingOrders.map(newOrder => {
+                  const existingOrder = this.orders.find(o => o.orderId === newOrder.orderId);
+                  let duration = 0;
+                  let shippedAt = null; 
+
+                  if (newOrder.shipping) {
+                      duration = newOrder.shipping.duration || 0;
+                      shippedAt = newOrder.shipping.shippedAt;
+                  }
+                  
+                  if (duration === 0 && existingOrder && existingOrder.duration) {
+                      duration = existingOrder.duration;
+                  }
+                  if (duration > 0 && shippedAt) {
+                      const totalDeliveryTimeMs = duration * 1000;
+                      const startTime = new Date(shippedAt).getTime();
+                      const now = Date.now();
+                      const timePassedMs = now - startTime;
+
+                      if (timePassedMs < totalDeliveryTimeMs) {
+                          newOrder.duration = duration;
+                          const progressPercent = (timePassedMs / totalDeliveryTimeMs) * 100;
+                          newOrder.progressPercent = Math.min(progressPercent, 100);
+                          newOrder.totalDurationMs = totalDeliveryTimeMs;
+                          newOrder.remainingDurationMs = totalDeliveryTimeMs - timePassedMs;
+                      } else {
+                          newOrder.progressPercent = 100;
+                          newOrder.duration = 0;
+                          newOrder.totalDurationMs = 0;
+                          newOrder.remainingDurationMs = 0;
+                      }
+                  } else {
+                      newOrder.duration = duration;
+                      newOrder.progressPercent = 0;
+                      newOrder.totalDurationMs = duration * 1000;
+                  }
+                  return newOrder;
+              });
           } else {
-            console.log('No orders from server');
+              this.orders = [];
           }
-        })
-        .catch(error => console.error(error));
+      })
+      .catch(error => console.error(error));
     },
-    async completeOrder(orderId) {      
-      // get the order and update the status
-      let order = this.orders.find(order => order.orderId === orderId);
-      order.status = 1;
+    // Sends shipping request to shipping service and updates order status
+    async shipOrder(orderId) {
+      let order = this.orders.find(o => o.orderId === orderId);
+      if (!order) return;
 
-      let orderObject = JSON.stringify(order)
-      console.log(orderObject);
-
+      const payload = {
+        orderId: String(order.orderId), 
+        shipping: {
+            postalCode: order.shipping.zip || order.shipping.postalCode || "K1A 0B1", 
+            address1: order.shipping.address1,
+            city: order.shipping.city
+        },
+        status: 2 
+      };
+      await fetch(`${shippingServiceUrl}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+      .then(res => {
+          if (res.ok) {
+              order.status = 2; 
+              alert(`Order ${orderId} has been queued for shipping!`);
+          } else {
+              alert("Failed to queue shipment. Check Shipping Service.");
+          }
+      })
+      .catch(err => console.error("Shipping Error:", err));
+    },
+    // Updates order status to 'Processing'
+    async completeOrder(orderId) {
+      await this.updateOrderStatus(orderId, 1);
+      alert('Order processed successfully');
+    },
+    // Cancels order by deleting it from backend
+    async cancelOrder(orderId) {
+      await fetch(`${makelineServiceUrl}order/${orderId}`, { method: 'DELETE' })
+      .then(res => {
+         if (res.ok) {
+            this.orders = this.orders.filter(o => o.orderId !== orderId);
+            if (this.$route.path.includes(`/order/${orderId}`)) this.$router.push('/'); 
+            alert('Order cancelled');
+         }
+      });
+    },
+    // Updates order items in backend
+    async updateOrder({ orderId, items }) {
+      let order = this.orders.find(o => o.orderId === orderId);
+      if (!order) return;
+      order.items = items;
       await fetch(`${makelineServiceUrl}order`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: orderObject
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(order)
+      });
+    },
+    // Updates order status in backend
+    async updateOrderStatus(orderId, status) {
+      let order = this.orders.find(o => o.orderId === orderId);
+      if (!order) return;
+      const updatedOrder = { ...order, status: status };
+      await fetch(`${makelineServiceUrl}order`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedOrder)
+      }).then(res => {
+        if(res.ok) order.status = status;
+      });
+    },
+    // Adds new product to local list
+    async addProductsToList(newProduct) { this.products.push(newProduct); },
+    // Updates existing product in local list
+    async updateProductInList(updatedProduct) {
+       const index = this.products.findIndex(p => p.id === updatedProduct.id);
+       if (index !== -1) this.products[index] = updatedProduct;
+    },
+    // Fetches a single product by ID
+    async getProduct(id) {
+       fetch(`${singleProductServiceUrl}${id}`).then(r => r.json()).then(p => {
+         this.product = p;
+       });
+    },
+    // Fetches all products
+    async getProducts() {
+       fetch(`${productServiceUrl}`).then(r => r.json()).then(p => {
+         this.products = p;
+       });
+    },
+    // Deletes a product by ID
+    async deleteProduct(productId) {
+      if (!confirm("Are you sure you want to delete this product? This cannot be undone.")) {
+        return;
+      }
+      await fetch(`${singleProductServiceUrl}${productId}`, {
+        method: 'DELETE'
       })
-        .then(response => {
-          if (!response.ok) {
-            alert('Error occurred while processing order')
-          } else {
-            alert('Order successfully processed')
-            // remove the order from the list
-            this.orders = this.orders.filter(order => order.orderId !== orderId);
-            this.$router.go(-1);
-          }
-        })
-        .catch(error => {
-          console.log(error)
-          alert('Error occurred while processing order')
-        })
+      .then(res => {
+        if (res.ok) {
+          this.products = this.products.filter(p => p.id !== productId);
+          alert("Product deleted successfully");
+          this.$router.push('/'); 
+        } else {
+          alert("Failed to delete product");
+        }
+      })
+      .catch(err => console.error("Delete Error:", err));
     }
-  },
+  }
 }
 </script>
 
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;700&display=swap');
+
 #app {
-  font-family: Avenir, Helvetica, Arial, sans-serif;
+  font-family: 'Roboto', Helvetica, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-align: center;
@@ -189,6 +294,12 @@ button {
 button:hover {
   background-color: #005f8b;
 }
+
+button:active {
+  background-color: #003691; 
+  transform: translateY(1px);
+}
+
 
 .action-button {
   float: right;

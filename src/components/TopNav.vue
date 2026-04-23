@@ -2,7 +2,7 @@
   <nav>
     <div class="logo">
       <a href="/">
-        <img src="/algonquin-pet-store.png" alt="Algonquin Pet Store Logo">
+        <img src="/best-buy-logo.png" alt="Best Buy Logo">
       </a>
       Admin Portal
     </div>
@@ -45,18 +45,17 @@ nav {
   padding-top: 0.5rem;
   padding-left: 1rem;
   padding-right: 1rem;
-  padding-bottom: 1px;
+  padding-bottom: 0.25px;
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
-  font-size: 1.5rem;
-  font-weight: bold;
+  z-index: 100;
 }
 
 nav img {
   padding-right: 15px;
-  width: 100px;
+  width: 120px;
   height: auto;
   align-self: center;
 }
