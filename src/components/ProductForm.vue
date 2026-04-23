@@ -16,9 +16,11 @@
             <input 
               id="product-name" 
               class="form-input input-title" 
+              :class="{ 'input-error': fieldErrors.name }"
               placeholder="e.g. UltraSlim X1 Laptop" 
               v-model="product.name" 
             />
+            <div v-if="fieldErrors.name" class="field-error">{{ fieldErrors.name }}</div>
         </div>
         
         <div class="meta-row">
@@ -26,6 +28,7 @@
                 <label class="input-label">Category</label>
                 <input 
                   class="form-input" 
+                  :class="{ 'input-error': fieldErrors.category }"
                   placeholder="e.g. Computers" 
                   v-model="product.category" 
                   list="category-options"
@@ -33,11 +36,13 @@
                 <datalist id="category-options">
                   <option v-for="cat in uniqueCategories" :key="cat" :value="cat"></option>
                 </datalist>
+                <div v-if="fieldErrors.category" class="field-error">{{ fieldErrors.category }}</div>
             </div>
             <div class="half-width">
                 <label class="input-label">Brand</label>
                 <input 
                   class="form-input" 
+                  :class="{ 'input-error': fieldErrors.brand }"
                   placeholder="e.g. Sony" 
                   v-model="product.brand" 
                   list="brand-options"
@@ -45,6 +50,7 @@
                 <datalist id="brand-options">
                   <option v-for="brand in uniqueBrands" :key="brand" :value="brand"></option>
                 </datalist>
+                <div v-if="fieldErrors.brand" class="field-error">{{ fieldErrors.brand }}</div>
             </div>
         </div>
       </div>
@@ -86,11 +92,13 @@
            <input 
              id="product-price" 
              class="form-input input-price" 
+             :class="{ 'input-error': fieldErrors.price }"
              placeholder="0.00" 
              v-model="product.price" 
              type="number" 
              step="0.01" 
            />
+           <div v-if="fieldErrors.price" class="field-error">{{ fieldErrors.price }}</div>
         </div>
 
         <div class="input-group">
@@ -98,13 +106,13 @@
           <textarea 
             rows="8" 
             class="form-input description-input" 
+            :class="{ 'input-error': fieldErrors.description }"
             placeholder="Enter full product description..." 
             v-model="product.description" 
           />
+          <div v-if="fieldErrors.description" class="field-error">{{ fieldErrors.description }}</div>
         </div>
         
-        <input type="hidden" v-model="product.id" />
-
       </div>
     </div>
 
@@ -113,6 +121,25 @@
 
 <script>
   const productServiceUrl = '/product/';
+
+  const FIELD_ERROR_MESSAGES = {
+    name: 'Product name is required.',
+    description: 'Description is required.',
+    price: 'Enter a valid price greater than 0.',
+    category: 'Category is required.',
+    brand: 'Brand is required.'
+  };
+
+  const createDefaultProduct = () => ({
+    id: 0,
+    name: '',
+    image: '/placeholder.png',
+    description: '',
+    price: 0.00,
+    category: '',
+    brand: '',
+    lastImageUpdate: Date.now()
+  });
   
   export default {
     name: 'ProductForm',
@@ -120,21 +147,15 @@
     emits: ['addProductsToList','updateProductInList'],
     data() {
       return {
-        product: {
-          id: 0,
-          name: '',
-          image: '/placeholder.png', 
-          description: '',
-          price: 0.00,
-          category: '',
-          brand: '',
-          lastImageUpdate: Date.now()
-        },
+        product: createDefaultProduct(),
         pendingImageFile: null,
         localPreviewUrl: null,
         showValidationErrors: false,
         isUploading: false
       }
+    },
+    beforeUnmount() {
+      this.revokePreviewUrl();
     },
     watch: {
       products: {
@@ -147,13 +168,27 @@
       }
     },
     computed: {
+      fieldErrors() {
+        if (!this.showValidationErrors) return this.emptyFieldErrors();
+
+        const hasText = (value) => (value || '').trim().length > 0;
+        const price = parseFloat(this.product.price);
+
+        return {
+          name: hasText(this.product.name) ? '' : FIELD_ERROR_MESSAGES.name,
+          description: hasText(this.product.description) ? '' : FIELD_ERROR_MESSAGES.description,
+          price: Number.isFinite(price) && price > 0 ? '' : FIELD_ERROR_MESSAGES.price,
+          category: hasText(this.product.category) ? '' : FIELD_ERROR_MESSAGES.category,
+          brand: hasText(this.product.brand) ? '' : FIELD_ERROR_MESSAGES.brand
+        };
+      },
       validationErrors() {
         let errors = [];
-        if (!this.product.name) errors.push('Please enter a name');
-        if (!this.product.description) errors.push('Please enter a description');
-        if (this.product.price <= 0) errors.push('Price must be greater than 0');
-        if (!this.product.category) errors.push('Please enter a category');
-        if (!this.product.brand) errors.push('Please enter a brand');
+        if (this.fieldErrors.name) errors.push(this.fieldErrors.name);
+        if (this.fieldErrors.description) errors.push(this.fieldErrors.description);
+        if (this.fieldErrors.price) errors.push(this.fieldErrors.price);
+        if (this.fieldErrors.category) errors.push(this.fieldErrors.category);
+        if (this.fieldErrors.brand) errors.push(this.fieldErrors.brand);
         return errors;
       },
       uniqueCategories() {
@@ -169,6 +204,25 @@
       }
     },
     methods: {
+      emptyFieldErrors() {
+        return {
+          name: '',
+          description: '',
+          price: '',
+          category: '',
+          brand: ''
+        };
+      },
+      revokePreviewUrl() {
+        if (this.localPreviewUrl) {
+          URL.revokeObjectURL(this.localPreviewUrl);
+        }
+      },
+      clearImagePreviewState() {
+        this.revokePreviewUrl();
+        this.pendingImageFile = null;
+        this.localPreviewUrl = null;
+      },
       // Sets image to placeholder on error
       handleImageError(e) {
         e.target.src = "/placeholder.png";
@@ -184,14 +238,8 @@
       },
       // Resets form to default state
       resetForm() {
-        this.product = {
-          id: 0, name: '', 
-          image: '/placeholder.png', 
-          description: '', price: 0.00, category: '', brand: '',
-          lastImageUpdate: Date.now()
-        };
-        this.pendingImageFile = null;
-        this.localPreviewUrl = null;
+        this.product = createDefaultProduct();
+        this.clearImagePreviewState();
         this.showValidationErrors = false;
         this.isUploading = false;
       },
@@ -202,8 +250,7 @@
         if (foundProduct) {
            this.product = Object.assign({}, foundProduct);
            this.product.lastImageUpdate = Date.now();
-           this.pendingImageFile = null;
-           this.localPreviewUrl = null;
+            this.clearImagePreviewState();
         }
       },
       // Handles image upload and preview
@@ -212,6 +259,7 @@
         if (!file) return;
 
         if (!this.product.id) {
+          this.revokePreviewUrl();
             this.pendingImageFile = file;
             this.localPreviewUrl = URL.createObjectURL(file);
             return;
@@ -234,8 +282,7 @@
             
             if (response.ok) {
                 this.product.lastImageUpdate = Date.now();
-                this.pendingImageFile = null;
-                this.localPreviewUrl = null;
+              this.clearImagePreviewState();
             } else {
                 alert('Failed to upload image');
             }
@@ -247,46 +294,85 @@
         }
       },
       // Saves product (create or update)
-      saveProduct() {
+      async saveProduct() {
         if (this.validationErrors.length > 0) {
           this.showValidationErrors = true;
           return;
         }
 
-        let method = 'PUT';
-        if (!this.$route.params.id) {
-          method = 'POST';
+        const method = this.$route.params.id ? 'PUT' : 'POST';
+
+        const payload = {
+          ...this.product,
+          name: (this.product.name || '').trim(),
+          description: (this.product.description || '').trim(),
+          category: (this.product.category || '').trim(),
+          brand: (this.product.brand || '').trim(),
+          price: parseFloat(this.product.price)
+        };
+
+        if (method === 'POST') {
+          payload.id = 0;  // product-service expects id:0 for new products
         }
 
-        this.product.price = parseFloat(this.product.price);
+        // UI-only timestamp should not be sent to the backend.
+        delete payload.lastImageUpdate;
 
-        fetch(`${productServiceUrl}`, {
-          method: method,
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(this.product)
-        })
-          .then(response => response.json())
-          .then(async savedProduct => {
-            
-            if (this.pendingImageFile) {
-                await this.performBackendUpload(this.pendingImageFile, savedProduct.id);
+        try {
+          const response = await fetch(`${productServiceUrl}`, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+
+          if (!response.ok) {
+            const errText = await response.text();
+            throw new Error(errText || `Save failed (${response.status})`);
+          }
+
+          const responseText = await response.text();
+          let savedProduct = {};
+          if (responseText) {
+            try {
+              savedProduct = JSON.parse(responseText);
+            } catch (e) {
+              console.warn('Save response is not valid JSON. Falling back to local payload.', e);
             }
+          }
 
-            alert('Product saved successfully');            
-            
-            this.product = { ...this.product, ...savedProduct };
+          this.product = {
+            ...this.product,
+            ...payload,
+            ...savedProduct,
+            id: savedProduct.id || payload.id || this.product.id
+          };
 
-            if (method === 'PUT') {
-              this.$emit('updateProductInList', this.product);
-            } else {
-              this.$emit('addProductsToList', this.product);
-            }
+          if (this.pendingImageFile && this.product.id) {
+            await this.performBackendUpload(this.pendingImageFile, this.product.id);
+          }
+
+          if (method === 'PUT') {
+            this.$emit('updateProductInList', this.product);
+          } else {
+            this.$emit('addProductsToList', this.product);
+          }
+
+          alert('Product saved successfully');
+
+          if (this.product.id) {
             this.$router.push(`${productServiceUrl}${this.product.id}`);
-          })
-          .catch(error => {
-            console.log(error)
-            alert('Error occurred while saving product')
-          })
+          } else {
+            this.$router.push('/products');
+          }
+        } catch (error) {
+          console.error(error);
+          // Strip HTML error pages down to a readable one-liner.
+          const raw = error && error.message ? error.message : '';
+          const clean = raw.startsWith('<')
+            ? `Server returned an error (${raw.match(/<title>(.*?)<\/title>/i)?.[1] || 'status 500'}). Check the dev server console for details.`
+            : raw || 'Unknown error';
+          alert(`Error occurred while saving product: ${clean}`);
+        }
       }
     }
   }
@@ -304,16 +390,23 @@
 }
 
 .error-banner {
-    background-color: #fff0f0;
-    border-left: 4px solid #cc0000;
-    color: #cc0000;
-    padding: 15px;
-    border-radius: 4px;
-    margin-bottom: 20px;
+  background: linear-gradient(135deg, #fff5f5 0%, #ffe9e9 100%);
+  border: 1px solid #ffcbcb;
+  border-left: 4px solid #d93025;
+  color: #9d1f1f;
+  padding: 14px 16px;
+  border-radius: 10px;
+  margin-bottom: 20px;
+  box-shadow: 0 6px 14px rgba(217, 48, 37, 0.12);
 }
 .error-banner ul {
-    margin: 5px 0 0 20px;
+  margin: 8px 0 0 20px;
     padding: 0;
+}
+
+.error-banner strong {
+  display: inline-block;
+  margin-bottom: 2px;
 }
 
 .header-actions {
@@ -351,6 +444,19 @@
     font-size: 1rem;
     box-sizing: border-box; 
     transition: border-color 0.2s;
+}
+
+.input-error {
+  border-color: #d93025 !important;
+  background-color: #fff8f8;
+}
+
+.field-error {
+  margin-top: 6px;
+  color: #b3261e;
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1.25;
 }
 
 .form-input:focus {
@@ -430,11 +536,6 @@
   object-fit: contain;
   padding: 10px;
   box-sizing: border-box;
-}
-
-.no-image {
-  color: #ccc;
-  font-weight: bold;
 }
 
 .upload-overlay {
