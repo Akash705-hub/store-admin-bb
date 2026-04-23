@@ -8,7 +8,6 @@
     @completeOrder="completeOrder"
     @addProductsToList="addProductsToList"
     @updateProductInList="updateProductInList"
-    @getProduct="getProduct"
     @getProducts="getProducts"
     @cancelOrder="cancelOrder"
     @shipOrder="shipOrder"
@@ -34,7 +33,6 @@ export default {
     return {
       orders: [],
       products: [],
-      product: {},
       polling: null
     }
   },
@@ -182,12 +180,6 @@ export default {
     async updateProductInList(updatedProduct) {
        const index = this.products.findIndex(p => p.id === updatedProduct.id);
        if (index !== -1) this.products[index] = updatedProduct;
-    },
-    // Fetches a single product by ID
-    async getProduct(id) {
-       fetch(`${singleProductServiceUrl}${id}`).then(r => r.json()).then(p => {
-         this.product = p;
-       });
     },
     // Fetches all products
     async getProducts() {

@@ -1,17 +1,18 @@
 <template>
-  <div class="progress-track">
+  <div class="progress-track" aria-label="Shipping progress">
     <div 
       class="progress-fill" 
       :style="animationStyle"
     ></div>
 
     <div 
-      class="car-icon"
+      class="progress-marker"
       :style="animationStyle"
     >
-      <svg viewBox="0 0 24 24" width="24" height="24" fill="#0046be">
-        <path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z"/>
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" aria-hidden="true">
+        <path d="M3 7.5L12 3l9 4.5-9 4.5-9-4.5zm0 4.5L12 16.5 21 12M3 16.5L12 21l9-4.5" stroke="#0046be" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
+      <span class="marker-glow" aria-hidden="true"></span>
     </div>
   </div>
 </template>
@@ -62,10 +63,11 @@ export default {
 .progress-track {
   position: relative;
   width: 100%;
-  height: 6px;
-  background-color: #e0e0e0;
-  border-radius: 3px;
+  height: 8px;
+  background: linear-gradient(90deg, #e6ebf4 0%, #dde4ef 100%);
+  border-radius: 999px;
   margin-top: 8px;
+  overflow: visible;
 }
 
 .progress-fill {
@@ -73,30 +75,64 @@ export default {
   top: 0;
   left: 0;
   height: 100%;
-  background-color: #ffe007;
-  border-radius: 3px;
+  background: linear-gradient(90deg, #ffe007 0%, #ffd000 50%, #ffc400 100%);
+  border-radius: 999px;
   width: 0%;
-  animation-name: drive-progress;
+  animation-name: shipping-progress;
   animation-timing-function: linear;
   animation-fill-mode: forwards;
+  box-shadow: 0 0 0 1px rgba(255, 208, 0, 0.15), 0 4px 10px rgba(255, 204, 0, 0.25);
 }
 
-.car-icon {
+.progress-marker {
   position: absolute;
-  top: -14px;
+  top: 50%;
   left: 0%;
-  animation-name: drive-car;
+  transform: translate(-50%, -50%);
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background-color: #ffffff;
+  border: 1px solid #d7e0ed;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 4px 14px rgba(11, 61, 145, 0.18);
+  animation-name: shipping-marker;
   animation-timing-function: linear;
   animation-fill-mode: forwards;
 }
 
-@keyframes drive-progress {
+.marker-glow {
+  position: absolute;
+  inset: -5px;
+  border-radius: 50%;
+  border: 2px solid rgba(0, 70, 190, 0.25);
+  animation: marker-pulse 1.8s ease-out infinite;
+  pointer-events: none;
+}
+
+@keyframes shipping-progress {
   0% { width: 0%; }
   100% { width: 100%; }
 }
 
-@keyframes drive-car {
+@keyframes shipping-marker {
   0% { left: 0%; }
-  100% { left: calc(100% - 12px); } 
+  100% { left: 100%; }
+}
+
+@keyframes marker-pulse {
+  0% {
+    transform: scale(0.75);
+    opacity: 0.7;
+  }
+  70% {
+    transform: scale(1.15);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1.15);
+    opacity: 0;
+  }
 }
 </style>
