@@ -5,6 +5,40 @@ const bodyParser = require('body-parser')
 const PRODUCT_SERVICE_URL = (process.env.VUE_APP_PRODUCT_SERVICE_URL || "http://172.19.0.2:3002/")
 const MAKELINE_SERVICE_URL = (process.env.VUE_APP_MAKELINE_SERVICE_URL || "http://172.19.0.6:3001/")
 
+async function sendUpstreamResponse(upstreamResponse, res) {
+  const contentType = upstreamResponse.headers.get('content-type') || ''
+  const bodyText = await upstreamResponse.text()
+
+  res.status(upstreamResponse.status)
+
+  if (!bodyText) {
+    res.end()
+    return
+  }
+
+  if (contentType.includes('application/json')) {
+    try {
+      res.send(JSON.parse(bodyText))
+      return
+    } catch (error) {
+      // Fall through and return the raw payload when upstream sends malformed JSON.
+      console.error('Invalid JSON response from upstream service:', error)
+    }
+  }
+
+  res.send(bodyText)
+}
+
+async function forwardRequest(res, url, options = {}) {
+  try {
+    const upstreamResponse = await fetch(url, options)
+    await sendUpstreamResponse(upstreamResponse, res)
+  } catch (error) {
+    console.error(`Failed to reach upstream endpoint ${url}:`, error)
+    res.status(502).send({ error: 'Upstream service unavailable' })
+  }
+}
+
 module.exports = defineConfig({
   transpileDependencies: true,
   devServer: {
@@ -71,71 +105,39 @@ module.exports = defineConfig({
       })
 
       // Get all products
-      devServer.app.get('/products', (_, res) => {
-        fetch(`${PRODUCT_SERVICE_URL}`)
-          .then(response => response.json())
-          .then(products => {
-            res.send(products)
-          })
-          .catch(error => {
-            console.log(error)
-            // alert('Error occurred while fetching products')
-          })
+      devServer.app.get('/products', async (_, res) => {
+        await forwardRequest(res, `${PRODUCT_SERVICE_URL}`)
       });
 
       // Get a single product by id
-      devServer.app.get('/product/:id', (_, res) => {
-        fetch(`${PRODUCT_SERVICE_URL}${_.params.id}`)
-          .then(response => response.json())
-          .then(products => {
-            res.send(products)
-          })
-          .catch(error => {
-            console.log(error)
-            // alert('Error occurred while fetching products')
-          })
+      devServer.app.get('/product/:id', async (_, res) => {
+        await forwardRequest(res, `${PRODUCT_SERVICE_URL}${_.params.id}`)
       });
 
       // Add product
-      devServer.app.post('/product', (req, res) => {
+      devServer.app.post('/product', async (req, res) => {
         console.log('Add product')
         const product = req.body
         console.log(product)
 
-        fetch(`${PRODUCT_SERVICE_URL}`, {
+        await forwardRequest(res, `${PRODUCT_SERVICE_URL}`, {
           method: 'POST',
           body: JSON.stringify(product),
           headers: { 'Content-Type': 'application/json' }
         })
-          .then(response => response.json())
-          .then(product => {
-            console.log(product);
-            res.send(product)
-          })
-          .catch(error => {
-            console.log(error)
-          })
       })
 
       // Update product
-      devServer.app.put('/product', (req, res) => {
+      devServer.app.put('/product', async (req, res) => {
         console.log('Update product')
         const product = req.body
         console.log(product)
 
-        fetch(`${PRODUCT_SERVICE_URL}`, {
+        await forwardRequest(res, `${PRODUCT_SERVICE_URL}`, {
           method: 'PUT',
           body: JSON.stringify(product),
           headers: { 'Content-Type': 'application/json' }
         })
-          .then(response => response.json())
-          .then(product => {
-            console.log(product);
-            res.send(product)
-          })
-          .catch(error => {
-            console.log(error)
-          })
       })
 
       // Get AI service health
